@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Produtividade G-MES</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; margin: 0; padding: 10px; }
+        .container { max-width: 1200px; margin: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .header { text-align: center; color: #1a73e8; margin-bottom: 20px; }
+        
+        .filter-group { display: flex; flex-wrap: wrap; gap: 10px; background: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; justify-content: center; }
+        .input-box { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 140px; }
+        label { font-size: 11px; font-weight: bold; color: #555; }
+        input, button { padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+        
+        button { background-color: #1a73e8; color: white; border: none; cursor: pointer; font-weight: bold; min-width: 120px; }
+        button:hover { background-color: #1557b0; }
+
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .stat-card { background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; border-left: 5px solid #1a73e8; }
+        .stat-card h3 { margin: 0; font-size: 12px; color: #666; }
+        .stat-card p { margin: 5px 0 0; font-size: 18px; font-weight: bold; color: #1a73e8; }
+
+        .chart-container { height: 300px; margin-bottom: 20px; border: 1px solid #eee; padding: 10px; border-radius: 8px; }
+        #statusConexao { text-align: center; font-size: 12px; margin-bottom: 10px; color: #666; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1 style="font-size: 20px;">Produtividade G-MES 2026</h1>
+        <div id="statusConexao">⌛ Carregando dados da nuvem...</div>
+    </div>
+
+    <div class="filter-group">
+        <div class="input-box">
+            <label>Data Início</label>
+            <input type="date" id="dataInicio">
+        </div>
+        <div class="input-box">
+            <label>Data Fim</label>
+            <input type="date" id="dataFim">
+        </div>
+        <div class="input-box">
+            <label>Localização (SrcWarehouseLocation)</label>
+            <input type="text" id="inputLocalizacao" placeholder="Ex: Linha29">
+        </div>
+        <button onclick="aplicarFiltros()">Atualizar</button>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>Soma (Kg)</h3>
+            <p id="statTotalKg">0.00</p>
+        </div>
+        <div class="stat-card">
+            <h3>Registros</h3>
+            <p id="statRegistros">0</p>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="chartProdutividadeDiaria"></canvas>
+    </div>
+</div>
+
+<script>
+    // Mude o link abaixo para o seu link do Google Sheets (CSV)
+    const URL_PLANILHA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRsMbWT3aqZ8t7jtk9uDa6Jtn8QpIUeS8sxcdMIYjvCNbgMjTDxDGWWQzzqSYENvbRcGq5UB7u4scwr/pub?gid=318060988&single=true&output=csv";
+
+    let dadosGlobais = [];
+    let chartDiario = null;
+
+    window.onload = function() {
+        buscarDadosOnline();
+    };
+
+    function buscarDadosOnline() {
+        fetch(URL_PLANILHA)
+            .then(res => res.text())
+            .then(csv => {
+                processarDados(csv);
+                document.getElementById('statusConexao').innerText = "✅ Dados atualizados";
+                document.getElementById('statusConexao').style.color = "green";
+            })
+            .catch(err => {
+                document.getElementById('statusConexao').innerText = "❌ Erro ao conectar com a planilha";
+                document.getElementById('statusConexao').style.color = "red";
+            });
+    }
+
+    function converterDataBRparaISO(dataBR) {
+        if (!dataBR) return null;
+        const partes = dataBR.split('/');
+        if (partes.length !== 3) return null;
+        return `${partes[2]}-${partes[1]}-${partes[0]}`;
+    }
+
+    function processarDados(csv) {
+        // Detecta se o separador é vírgula ou ponto e vírgula
+        const separador = csv.includes(';') ? ';' : ',';
+        const linhas = csv.split(/\r?\n/).filter(line => line.trim() !== "" && !line.startsWith(';;'));
+        const cabecalho = linhas[0].split(separador);
+        
+        const idxDia = cabecalho.indexOf('Dia');
+        const idxSrcLoc = cabecalho.indexOf('SrcWarehouseLocation');
+        const idxNewQty = cabecalho.indexOf('NewQuantity');
+
+        dadosGlobais = linhas.slice(1).map(linha => {
+            const col = linha.split(separador);
+            const valorLimpo = col[idxNewQty] ? col[idxNewQty].replace(',', '.') : "0";
+            const dataISO = converterDataBRparaISO(col[idxDia]);
+
+            return {
+                diaISO: dataISO,
+                dataObj: dataISO ? new Date(dataISO + "T00:00:00") : null,
+                localizacao: col[idxSrcLoc] ? col[idxSrcLoc].trim() : "",
+                peso: parseFloat(valorLimpo) || 0
+            };
+        }).filter(d => d.dataObj !== null);
+
+        aplicarFiltros();
+    }
+
+    function aplicarFiltros() {
+        const dtInicio = document.getElementById('dataInicio').value;
+        const dtFim = document.getElementById('dataFim').value;
+        const locPesquisa = document.getElementById('inputLocalizacao').value.trim().toLowerCase();
+
+        const filtrados = dadosGlobais.filter(d => {
+            const dInicio = dtInicio ? d.dataObj >= new Date(dtInicio + "T00:00:00") : true;
+            const dFim = dtFim ? d.dataObj <= new Date(dtFim + "T00:00:00") : true;
+            const locOk = locPesquisa === "" || d.localizacao.toLowerCase().includes(locPesquisa);
+            return dInicio && dFim && locOk;
+        });
+
+        atualizarDashboard(filtrados);
+    }
+
+    function atualizarDashboard(dados) {
+        const totalKg = dados.reduce((acc, cur) => acc + cur.peso, 0);
+        document.getElementById('statTotalKg').textContent = totalKg.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+        document.getElementById('statRegistros').textContent = dados.length;
+
+        const porDia = {};
+        dados.forEach(d => porDia[d.diaISO] = (porDia[d.diaISO] || 0) + d.peso);
+
+        const labels = Object.keys(porDia).sort();
+        const valores = labels.map(l => porDia[l]);
+
+        if (chartDiario) chartDiario.destroy();
+        chartDiario = new Chart(document.getElementById('chartProdutividadeDiaria'), {
+            type: 'bar',
+            data: {
+                labels: labels.map(l => l.split('-').reverse().slice(0,2).join('/')),
+                datasets: [{ label: 'Produção (Kg)', data: valores, backgroundColor: '#1a73e8' }]
+            },
+            options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+    }
+</script>
+</body>
+</html>
