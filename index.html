@@ -9,15 +9,16 @@
         body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; margin: 0; padding: 10px; }
         .container { max-width: 1000px; margin: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         .header { text-align: center; color: #1a73e8; margin-bottom: 15px; }
-        #status { text-align: center; font-size: 12px; font-weight: bold; margin-bottom: 10px; }
+        #status { text-align: center; font-size: 11px; font-weight: bold; margin-bottom: 10px; color: #666; }
         .filter-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; background: #f8f9fa; padding: 10px; border-radius: 8px; }
         .input-box { display: flex; flex-direction: column; font-size: 12px; }
-        input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        label { font-weight: bold; margin-bottom: 4px; color: #444; }
+        input { padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
         .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
         .card { background: #1a73e8; color: white; padding: 15px; border-radius: 8px; text-align: center; }
-        .card h3 { margin: 0; font-size: 12px; opacity: 0.9; }
-        .card p { margin: 5px 0 0; font-size: 20px; font-weight: bold; }
-        .chart-container { height: 300px; position: relative; }
+        .card h3 { margin: 0; font-size: 12px; opacity: 0.9; text-transform: uppercase; }
+        .card p { margin: 5px 0 0; font-size: 22px; font-weight: bold; }
+        .chart-container { height: 320px; position: relative; }
     </style>
 </head>
 <body>
@@ -25,7 +26,7 @@
 <div class="container">
     <div class="header">
         <h2 style="margin:0">Produtividade G-MES</h2>
-        <div id="status">⌛ Conectando à nuvem...</div>
+        <div id="status">⌛ Conectando à base de dados...</div>
     </div>
 
     <div class="filter-group">
@@ -38,18 +39,18 @@
             <input type="date" id="dataFim" onchange="aplicarFiltros()">
         </div>
         <div class="input-box" style="grid-column: span 2;">
-            <label>Localização (Busca rápida)</label>
-            <input type="text" id="buscaLoc" placeholder="Ex: Linha29" oninput="aplicarFiltros()">
+            <label>Filtrar Localização (Ex: Linha29promo)</label>
+            <input type="text" id="buscaLoc" placeholder="Digite a linha ou local..." oninput="aplicarFiltros()">
         </div>
     </div>
 
     <div class="stats">
         <div class="card">
-            <h3>TOTAL KG</h3>
+            <h3>Produção Total (Kg)</h3>
             <p id="totalKg">0,00</p>
         </div>
         <div class="card" style="background: #34a853;">
-            <h3>REGISTROS</h3>
+            <h3>Qtd. Registros</h3>
             <p id="totalReg">0</p>
         </div>
     </div>
@@ -60,7 +61,6 @@
 </div>
 
 <script>
-    // SEU LINK VALIDADO
     const URL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRsMbWT3aqZ8t7jtk9uDa6Jtn8QpIUeS8sxcdMIYjvCNbgMjTDxDGWWQzzqSYENvbRcGq5UB7u4scwr/pub?gid=318060988&single=true&output=csv";
 
     let dadosOriginais = [];
@@ -71,7 +71,6 @@
             .then(res => res.text())
             .then(csv => {
                 const linhas = csv.split(/\r?\n/).filter(l => l.trim() !== "");
-                // O Google Sheets costuma usar vírgula como padrão na web
                 const sep = csv.includes(';') ? ';' : ',';
                 const headers = linhas[0].split(sep).map(h => h.replace(/"/g, '').trim());
 
@@ -81,12 +80,10 @@
 
                 dadosOriginais = linhas.slice(1).map(linha => {
                     const col = linha.split(sep).map(c => c.replace(/"/g, '').trim());
-                    if(col.length < iQty) return null;
+                    if(col.length <= iQty) return null;
 
-                    // Converte "6,7" ou "6.7" para número
                     const peso = parseFloat(col[iQty].replace(',', '.')) || 0;
                     
-                    // Trata data DD/MM/AAAA ou AAAA-MM-DD
                     let dataISO = col[iDia];
                     if(dataISO.includes('/')) {
                         const p = dataISO.split('/');
@@ -96,16 +93,16 @@
                     return {
                         dataISO: dataISO,
                         dataObj: new Date(dataISO + "T00:00:00"),
-                        local: col[iLoc],
+                        local: col[iLoc], // Aqui mantém "Linha29promo"
                         peso: peso
                     };
                 }).filter(d => d && !isNaN(d.dataObj.getTime()));
 
-                document.getElementById('status').innerHTML = "✅ Atualizado: " + new Date().toLocaleTimeString();
+                document.getElementById('status').innerHTML = "✅ Conectado: " + new Date().toLocaleTimeString();
                 aplicarFiltros();
             })
             .catch(err => {
-                document.getElementById('status').innerHTML = "❌ Erro ao carregar dados";
+                document.getElementById('status').innerHTML = "❌ Erro na conexão";
                 console.error(err);
             });
     };
@@ -113,20 +110,18 @@
     function aplicarFiltros() {
         const d1 = document.getElementById('dataInicio').value;
         const d2 = document.getElementById('dataFim').value;
-        const busca = document.getElementById('buscaLoc').value.toLowerCase();
+        const busca = document.getElementById('buscaLoc').value.toLowerCase().trim();
 
         const filtrados = dadosOriginais.filter(d => {
             const matchData = (!d1 || d.dataISO >= d1) && (!d2 || d.dataISO <= d2);
+            // Busca inteligente: se ele digitar "Linha29", encontra "Linha29promo"
             const matchLoc = !busca || d.local.toLowerCase().includes(busca);
             return matchData && matchLoc;
         });
 
-        // Atualiza números
-        const total = filtrados.reduce((acc, cur) => acc + cur.peso, 0);
-        document.getElementById('totalKg').innerText = total.toLocaleString('pt-BR', {minimumFractionDigits:2});
+        document.getElementById('totalKg').innerText = filtrados.reduce((acc, cur) => acc + cur.peso, 0).toLocaleString('pt-BR', {minimumFractionDigits:2});
         document.getElementById('totalReg').innerText = filtrados.length;
 
-        // Atualiza Gráfico
         const agrupado = {};
         filtrados.forEach(d => {
             agrupado[d.dataISO] = (agrupado[d.dataISO] || 0) + d.peso;
@@ -140,9 +135,17 @@
             type: 'bar',
             data: {
                 labels: labels.map(l => l.split('-').reverse().slice(0,2).join('/')),
-                datasets: [{ label: 'Kg por Dia', data: valores, backgroundColor: '#4285f4' }]
+                datasets: [{ 
+                    label: 'Produção Diária (Kg)', 
+                    data: valores, 
+                    backgroundColor: '#1a73e8',
+                    borderRadius: 5
+                }]
             },
-            options: { maintainAspectRatio: false }
+            options: { 
+                maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true } }
+            }
         });
     }
 </script>
