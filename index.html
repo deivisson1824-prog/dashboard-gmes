@@ -99,31 +99,38 @@
         return `${partes[2]}-${partes[1]}-${partes[0]}`;
     }
 
-    function processarDados(csv) {
-        // Detecta se o separador é vírgula ou ponto e vírgula
-        const separador = csv.includes(';') ? ';' : ',';
-        const linhas = csv.split(/\r?\n/).filter(line => line.trim() !== "" && !line.startsWith(';;'));
-        const cabecalho = linhas[0].split(separador);
+   function processarDados(csv) {
+    // Detecta automaticamente se o Google enviou com , ou ;
+    const separador = csv.includes(';') ? ';' : ',';
+    
+    // Divide as linhas e limpa linhas vazias ou de cabeçalho do Excel
+    const linhas = csv.split(/\r?\n/).filter(line => line.trim() !== "" && line.includes(separador));
+    const cabecalho = linhas[0].split(separador);
+    
+    // Mapeia os índices das colunas
+    const idxDia = cabecalho.indexOf('Dia');
+    const idxSrcLoc = cabecalho.indexOf('SrcWarehouseLocation');
+    const idxNewQty = cabecalho.indexOf('NewQuantity');
+
+    dadosGlobais = linhas.slice(1).map(linha => {
+        const col = linha.split(separador);
         
-        const idxDia = cabecalho.indexOf('Dia');
-        const idxSrcLoc = cabecalho.indexOf('SrcWarehouseLocation');
-        const idxNewQty = cabecalho.indexOf('NewQuantity');
+        // Limpa o valor numérico (trata 6,7 ou 6.7)
+        let valorRaw = col[idxNewQty] || "0";
+        const valorPeso = parseFloat(valorRaw.replace(',', '.'));
 
-        dadosGlobais = linhas.slice(1).map(linha => {
-            const col = linha.split(separador);
-            const valorLimpo = col[idxNewQty] ? col[idxNewQty].replace(',', '.') : "0";
-            const dataISO = converterDataBRparaISO(col[idxDia]);
+        // Trata a data (converte DD/MM/AAAA para AAAA-MM-DD)
+        const dataISO = converterDataBRparaISO(col[idxDia]);
 
-            return {
-                diaISO: dataISO,
-                dataObj: dataISO ? new Date(dataISO + "T00:00:00") : null,
-                localizacao: col[idxSrcLoc] ? col[idxSrcLoc].trim() : "",
-                peso: parseFloat(valorLimpo) || 0
-            };
-        }).filter(d => d.dataObj !== null);
+        return {
+            dataObj: dataISO ? new Date(dataISO + "T00:00:00") : null,
+            localizacao: col[idxSrcLoc] ? col[idxSrcLoc].trim() : "",
+            peso: isNaN(valorPeso) ? 0 : valorPeso
+        };
+    }).filter(d => d.dataObj !== null);
 
-        aplicarFiltros();
-    }
+    aplicarFiltros();
+}
 
     function aplicarFiltros() {
         const dtInicio = document.getElementById('dataInicio').value;
