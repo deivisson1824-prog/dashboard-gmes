@@ -79,16 +79,21 @@
     };
 
     function buscarDadosOnline() {
+        const status = document.getElementById('statusConexao');
         fetch(URL_PLANILHA)
-            .then(res => res.text())
+            .then(res => {
+                if (!res.ok) throw new Error("Link da planilha inválido ou privado");
+                return res.text();
+            })
             .then(csv => {
+                if (csv.includes("<!DOCTYPE html>")) throw new Error("O link aponta para uma página e não para o arquivo CSV");
                 processarDados(csv);
-                document.getElementById('statusConexao').innerText = "✅ Dados atualizados";
-                document.getElementById('statusConexao').style.color = "green";
+                status.innerText = "✅ Dados atualizados";
             })
             .catch(err => {
-                document.getElementById('statusConexao').innerText = "❌ Erro ao conectar com a planilha";
-                document.getElementById('statusConexao').style.color = "red";
+                status.innerText = "❌ Erro: " + err.message;
+                status.style.color = "red";
+                console.error(err);
             });
     }
 
