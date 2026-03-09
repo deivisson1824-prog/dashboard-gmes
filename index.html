@@ -3,169 +3,146 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard de Produtividade G-MES</title>
+    <title>Dashboard G-MES Oficial</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; margin: 0; padding: 10px; }
-        .container { max-width: 1200px; margin: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        .header { text-align: center; color: #1a73e8; margin-bottom: 20px; }
-        
-        .filter-group { display: flex; flex-wrap: wrap; gap: 10px; background: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; justify-content: center; }
-        .input-box { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 140px; }
-        label { font-size: 11px; font-weight: bold; color: #555; }
-        input, button { padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
-        
-        button { background-color: #1a73e8; color: white; border: none; cursor: pointer; font-weight: bold; min-width: 120px; }
-        button:hover { background-color: #1557b0; }
-
-        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-        .stat-card { background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; border-left: 5px solid #1a73e8; }
-        .stat-card h3 { margin: 0; font-size: 12px; color: #666; }
-        .stat-card p { margin: 5px 0 0; font-size: 18px; font-weight: bold; color: #1a73e8; }
-
-        .chart-container { height: 300px; margin-bottom: 20px; border: 1px solid #eee; padding: 10px; border-radius: 8px; }
-        #statusConexao { text-align: center; font-size: 12px; margin-bottom: 10px; color: #666; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; margin: 0; padding: 10px; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .header { text-align: center; color: #1a73e8; margin-bottom: 15px; }
+        #status { text-align: center; font-size: 12px; font-weight: bold; margin-bottom: 10px; }
+        .filter-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; background: #f8f9fa; padding: 10px; border-radius: 8px; }
+        .input-box { display: flex; flex-direction: column; font-size: 12px; }
+        input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .card { background: #1a73e8; color: white; padding: 15px; border-radius: 8px; text-align: center; }
+        .card h3 { margin: 0; font-size: 12px; opacity: 0.9; }
+        .card p { margin: 5px 0 0; font-size: 20px; font-weight: bold; }
+        .chart-container { height: 300px; position: relative; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="header">
-        <h1 style="font-size: 20px;">Produtividade G-MES 2026</h1>
-        <div id="statusConexao">⌛ Carregando dados da nuvem...</div>
+        <h2 style="margin:0">Produtividade G-MES</h2>
+        <div id="status">⌛ Conectando à nuvem...</div>
     </div>
 
     <div class="filter-group">
         <div class="input-box">
-            <label>Data Início</label>
-            <input type="date" id="dataInicio">
+            <label>Início</label>
+            <input type="date" id="dataInicio" onchange="aplicarFiltros()">
         </div>
         <div class="input-box">
-            <label>Data Fim</label>
-            <input type="date" id="dataFim">
+            <label>Fim</label>
+            <input type="date" id="dataFim" onchange="aplicarFiltros()">
         </div>
-        <div class="input-box">
-            <label>Localização (SrcWarehouseLocation)</label>
-            <input type="text" id="inputLocalizacao" placeholder="Ex: Linha29">
+        <div class="input-box" style="grid-column: span 2;">
+            <label>Localização (Busca rápida)</label>
+            <input type="text" id="buscaLoc" placeholder="Ex: Linha29" oninput="aplicarFiltros()">
         </div>
-        <button onclick="aplicarFiltros()">Atualizar</button>
     </div>
 
-    <div class="stats-grid">
-        <div class="stat-card">
-            <h3>Soma (Kg)</h3>
-            <p id="statTotalKg">0.00</p>
+    <div class="stats">
+        <div class="card">
+            <h3>TOTAL KG</h3>
+            <p id="totalKg">0,00</p>
         </div>
-        <div class="stat-card">
-            <h3>Registros</h3>
-            <p id="statRegistros">0</p>
+        <div class="card" style="background: #34a853;">
+            <h3>REGISTROS</h3>
+            <p id="totalReg">0</p>
         </div>
     </div>
 
     <div class="chart-container">
-        <canvas id="chartProdutividadeDiaria"></canvas>
+        <canvas id="graficoDiario"></canvas>
     </div>
 </div>
 
 <script>
-    // Mude o link abaixo para o seu link do Google Sheets (CSV)
-    const URL_PLANILHA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRsMbWT3aqZ8t7jtk9uDa6Jtn8QpIUeS8sxcdMIYjvCNbgMjTDxDGWWQzzqSYENvbRcGq5UB7u4scwr/pub?gid=318060988&single=true&output=csv";
+    // SEU LINK VALIDADO
+    const URL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRsMbWT3aqZ8t7jtk9uDa6Jtn8QpIUeS8sxcdMIYjvCNbgMjTDxDGWWQzzqSYENvbRcGq5UB7u4scwr/pub?gid=318060988&single=true&output=csv";
 
-    let dadosGlobais = [];
-    let chartDiario = null;
+    let dadosOriginais = [];
+    let meuGrafico = null;
 
-    window.onload = function() {
-        buscarDadosOnline();
-    };
-
-    function buscarDadosOnline() {
-        fetch(URL_PLANILHA)
+    window.onload = () => {
+        fetch(URL_CSV)
             .then(res => res.text())
             .then(csv => {
-                processarDados(csv);
-                document.getElementById('statusConexao').innerText = "✅ Dados atualizados";
-                document.getElementById('statusConexao').style.color = "green";
+                const linhas = csv.split(/\r?\n/).filter(l => l.trim() !== "");
+                // O Google Sheets costuma usar vírgula como padrão na web
+                const sep = csv.includes(';') ? ';' : ',';
+                const headers = linhas[0].split(sep).map(h => h.replace(/"/g, '').trim());
+
+                const iDia = headers.indexOf("Dia");
+                const iLoc = headers.indexOf("SrcWarehouseLocation");
+                const iQty = headers.indexOf("NewQuantity");
+
+                dadosOriginais = linhas.slice(1).map(linha => {
+                    const col = linha.split(sep).map(c => c.replace(/"/g, '').trim());
+                    if(col.length < iQty) return null;
+
+                    // Converte "6,7" ou "6.7" para número
+                    const peso = parseFloat(col[iQty].replace(',', '.')) || 0;
+                    
+                    // Trata data DD/MM/AAAA ou AAAA-MM-DD
+                    let dataISO = col[iDia];
+                    if(dataISO.includes('/')) {
+                        const p = dataISO.split('/');
+                        dataISO = `${p[2]}-${p[1]}-${p[0]}`;
+                    }
+
+                    return {
+                        dataISO: dataISO,
+                        dataObj: new Date(dataISO + "T00:00:00"),
+                        local: col[iLoc],
+                        peso: peso
+                    };
+                }).filter(d => d && !isNaN(d.dataObj.getTime()));
+
+                document.getElementById('status').innerHTML = "✅ Atualizado: " + new Date().toLocaleTimeString();
+                aplicarFiltros();
             })
             .catch(err => {
-                document.getElementById('statusConexao').innerText = "❌ Erro ao conectar com a planilha";
-                document.getElementById('statusConexao').style.color = "red";
+                document.getElementById('status').innerHTML = "❌ Erro ao carregar dados";
+                console.error(err);
             });
-    }
-
-    function converterDataBRparaISO(dataBR) {
-        if (!dataBR) return null;
-        const partes = dataBR.split('/');
-        if (partes.length !== 3) return null;
-        return `${partes[2]}-${partes[1]}-${partes[0]}`;
-    }
-
-   function processarDados(csv) {
-    // Detecta automaticamente se o Google enviou com , ou ;
-    const separador = csv.includes(';') ? ';' : ',';
-    
-    // Divide as linhas e limpa linhas vazias ou de cabeçalho do Excel
-    const linhas = csv.split(/\r?\n/).filter(line => line.trim() !== "" && line.includes(separador));
-    const cabecalho = linhas[0].split(separador);
-    
-    // Mapeia os índices das colunas
-    const idxDia = cabecalho.indexOf('Dia');
-    const idxSrcLoc = cabecalho.indexOf('SrcWarehouseLocation');
-    const idxNewQty = cabecalho.indexOf('NewQuantity');
-
-    dadosGlobais = linhas.slice(1).map(linha => {
-        const col = linha.split(separador);
-        
-        // Limpa o valor numérico (trata 6,7 ou 6.7)
-        let valorRaw = col[idxNewQty] || "0";
-        const valorPeso = parseFloat(valorRaw.replace(',', '.'));
-
-        // Trata a data (converte DD/MM/AAAA para AAAA-MM-DD)
-        const dataISO = converterDataBRparaISO(col[idxDia]);
-
-        return {
-            dataObj: dataISO ? new Date(dataISO + "T00:00:00") : null,
-            localizacao: col[idxSrcLoc] ? col[idxSrcLoc].trim() : "",
-            peso: isNaN(valorPeso) ? 0 : valorPeso
-        };
-    }).filter(d => d.dataObj !== null);
-
-    aplicarFiltros();
-}
+    };
 
     function aplicarFiltros() {
-        const dtInicio = document.getElementById('dataInicio').value;
-        const dtFim = document.getElementById('dataFim').value;
-        const locPesquisa = document.getElementById('inputLocalizacao').value.trim().toLowerCase();
+        const d1 = document.getElementById('dataInicio').value;
+        const d2 = document.getElementById('dataFim').value;
+        const busca = document.getElementById('buscaLoc').value.toLowerCase();
 
-        const filtrados = dadosGlobais.filter(d => {
-            const dInicio = dtInicio ? d.dataObj >= new Date(dtInicio + "T00:00:00") : true;
-            const dFim = dtFim ? d.dataObj <= new Date(dtFim + "T00:00:00") : true;
-            const locOk = locPesquisa === "" || d.localizacao.toLowerCase().includes(locPesquisa);
-            return dInicio && dFim && locOk;
+        const filtrados = dadosOriginais.filter(d => {
+            const matchData = (!d1 || d.dataISO >= d1) && (!d2 || d.dataISO <= d2);
+            const matchLoc = !busca || d.local.toLowerCase().includes(busca);
+            return matchData && matchLoc;
         });
 
-        atualizarDashboard(filtrados);
-    }
+        // Atualiza números
+        const total = filtrados.reduce((acc, cur) => acc + cur.peso, 0);
+        document.getElementById('totalKg').innerText = total.toLocaleString('pt-BR', {minimumFractionDigits:2});
+        document.getElementById('totalReg').innerText = filtrados.length;
 
-    function atualizarDashboard(dados) {
-        const totalKg = dados.reduce((acc, cur) => acc + cur.peso, 0);
-        document.getElementById('statTotalKg').textContent = totalKg.toLocaleString('pt-BR', {minimumFractionDigits: 2});
-        document.getElementById('statRegistros').textContent = dados.length;
+        // Atualiza Gráfico
+        const agrupado = {};
+        filtrados.forEach(d => {
+            agrupado[d.dataISO] = (agrupado[d.dataISO] || 0) + d.peso;
+        });
 
-        const porDia = {};
-        dados.forEach(d => porDia[d.diaISO] = (porDia[d.diaISO] || 0) + d.peso);
+        const labels = Object.keys(agrupado).sort();
+        const valores = labels.map(l => agrupado[l]);
 
-        const labels = Object.keys(porDia).sort();
-        const valores = labels.map(l => porDia[l]);
-
-        if (chartDiario) chartDiario.destroy();
-        chartDiario = new Chart(document.getElementById('chartProdutividadeDiaria'), {
+        if(meuGrafico) meuGrafico.destroy();
+        meuGrafico = new Chart(document.getElementById('graficoDiario'), {
             type: 'bar',
             data: {
                 labels: labels.map(l => l.split('-').reverse().slice(0,2).join('/')),
-                datasets: [{ label: 'Produção (Kg)', data: valores, backgroundColor: '#1a73e8' }]
+                datasets: [{ label: 'Kg por Dia', data: valores, backgroundColor: '#4285f4' }]
             },
-            options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+            options: { maintainAspectRatio: false }
         });
     }
 </script>
