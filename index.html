@@ -128,15 +128,17 @@
             });
     };
 
-    function aplicarFiltros() {
-        const d1 = document.getElementById('dataInicio').value;
-        const d2 = document.getElementById('dataFim').value;
-        const busca = document.getElementById('buscaLoc').value.toLowerCase().trim();
+        function aplicarFiltros() {
+            const d1 = document.getElementById('dataInicio').value; // Formato YYYY-MM-DD
+            const d2 = document.getElementById('dataFim').value;
+            const busca = document.getElementById('buscaLoc').value.toLowerCase();
 
         const filtrados = dadosOriginais.filter(d => {
-            const matchData = (!d1 || d.dataISO >= d1) && (!d2 || d.dataISO <= d2);
+            const dataItem = d.dataISO; // Já deve estar em YYYY-MM-DD
+            const matchData = (!d1 || dataItem >= d1) && (!d2 || dataItem <= d2);
             const matchLoc = !busca || d.local.toLowerCase().includes(busca);
-            return matchData && matchLoc;
+        return matchData && matchLoc;
+
         });
 
         document.getElementById('totalKg').innerText = filtrados.reduce((acc, cur) => acc + cur.peso, 0).toLocaleString('pt-BR', {minimumFractionDigits:2});
