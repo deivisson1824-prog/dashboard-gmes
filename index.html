@@ -70,83 +70,94 @@ const URL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRsMbWT3aqZ8t7j
         fetch(URL_CSV)
             .then(res => res.text())
             .then(csv => {
-                const linhas = csv.split(/\r?\n/).filter(l => l.trim() !== "");
-                const sep = csv.includes(';') ? ';' : ',';
-                const headers = linhas[0].split(sep).map(h => h.replace(/"/g, '').trim());
+                // Divide por linhas e remove linhas totalmente vazias (comum no final do CSV)
+                const linhas = csv.split(/\r?\n/).filter(l => l.trim() !== "" && l.includes(';'));
+                
+                // Identifica os cabeçalhos (usando ponto e vírgula conforme sua base)
+                const headers = linhas[0].split(';').map(h => h.replace(/"/g, '').trim());
 
+                // Localiza as colunas dinamicamente para evitar erros se a ordem mudar
                 const iDia = headers.indexOf("Dia");
                 const iLoc = headers.indexOf("SrcWarehouseLocation");
                 const iQty = headers.indexOf("NewQuantity");
 
                 dadosOriginais = linhas.slice(1).map(linha => {
-                    const col = linha.split(sep).map(c => c.replace(/"/g, '').trim());
-                    if(col.length <= iQty) return null;
+                    const col = linha.split(';').map(c => c.replace(/"/g, '').trim());
+                    
+                    // Pula linhas que não tenham dados suficientes
+                    if(!col[iDia] || !col[iQty]) return null;
 
+                    // 1. CORREÇÃO DE NÚMERO: transforma "6,7" em 6.7
                     const peso = parseFloat(col[iQty].replace(',', '.')) || 0;
                     
-                    // Tratamento robusto de data
-                    let dataRaw = col[iDia];
+                    // 2. CORREÇÃO DE DATA (Inversão dia/mês):
+                    // Esperado: DD/MM/AAAA
+                    const dataTexto = col[iDia]; 
                     let dataISO = "";
-                    if (dataRaw.includes('/')) {
-                        const p = dataRaw.split('/');
-                        // Garante formato YYYY-MM-DD para comparação de strings
-                        dataISO = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+
+                    if(dataTexto.includes('/')) {
+                        const partes = dataTexto.split('/');
+                        const dia = partes[0].padStart(2, '0');
+                        const mes = partes[1].padStart(2, '0');
+                        const ano = partes[2].length === 2 ? "20" + partes[2] : partes[2];
+                        
+                        // Força o padrão internacional YYYY-MM-DD para o filtro funcionar
+                        dataISO = `${ano}-${mes}-${dia}`;
                     } else {
-                        dataISO = dataRaw;
+                        dataISO = dataTexto; // Caso já venha em formato ISO
                     }
 
                     return {
                         dataISO: dataISO,
                         dataObj: new Date(dataISO + "T00:00:00"),
-                        local: col[iLoc],
+                        local: col[iLoc] || "Sem Local",
                         peso: peso
                     };
                 }).filter(d => d && !isNaN(d.dataObj.getTime()));
 
-                document.getElementById('status').innerHTML = "✅ Conectado: " + new Date().toLocaleTimeString();
+                document.getElementById('status').innerHTML = "✅ Base Carregada: " + new Date().toLocaleTimeString();
                 aplicarFiltros();
             })
             .catch(err => {
-                document.getElementById('status').innerHTML = "❌ Erro na conexão";
+                document.getElementById('status').innerHTML = "❌ Erro ao conectar com a base do Google";
                 console.error(err);
             });
     };
 
     function aplicarFiltros() {
-        const d1 = document.getElementById('dataInicio').value; // Formato YYYY-MM-DD
-        const d2 = document.getElementById('dataFim').value;    // Formato YYYY-MM-DD
+        const d1 = document.getElementById('dataInicio').value; // Recebe YYYY-MM-DD do input
+        const d2 = document.getElementById('dataFim').value;
         const busca = document.getElementById('buscaLoc').value.toLowerCase().trim();
 
+        // Filtra os dados
         const filtrados = dadosOriginais.filter(d => {
             const matchData = (!d1 || d.dataISO >= d1) && (!d2 || d.dataISO <= d2);
             const matchLoc = !busca || d.local.toLowerCase().includes(busca);
             return matchData && matchLoc;
         });
 
-        // Atualiza indicadores numéricos
-        const somaTotal = filtrados.reduce((acc, cur) => acc + cur.peso, 0);
-        document.getElementById('totalKg').innerText = somaTotal.toLocaleString('pt-BR', {minimumFractionDigits:2});
+        // Atualiza os Cards de resumo
+        const totalKg = filtrados.reduce((acc, cur) => acc + cur.peso, 0);
+        document.getElementById('totalKg').innerText = totalKg.toLocaleString('pt-BR', {minimumFractionDigits:2});
         document.getElementById('totalReg').innerText = filtrados.length;
 
-        // Agrupa dados para o gráfico
+        // Agrupa por dia para o gráfico
         const agrupado = {};
         filtrados.forEach(d => {
             agrupado[d.dataISO] = (agrupado[d.dataISO] || 0) + d.peso;
         });
 
-        const labelsOrdenados = Object.keys(agrupado).sort();
-        const valoresOrdenados = labelsOrdenados.map(l => agrupado[l]);
+        const labels = Object.keys(agrupado).sort();
+        const valores = labels.map(l => agrupado[l]);
 
-        renderizarNovoGrafico(labelsOrdenados, valoresOrdenados);
-    }
-
-    function renderizarNovoGrafico(labels, valores) {
+        // Reconstrói o gráfico
         if(meuGrafico) meuGrafico.destroy();
         
         const ctx = document.getElementById('graficoDiario').getContext('2d');
         meuGrafico = new Chart(ctx, {
             type: 'bar',
             data: {
+                // Exibe no gráfico como DD/MM (mais amigável para o usuário)
                 labels: labels.map(l => l.split('-').reverse().slice(0,2).join('/')),
                 datasets: [{ 
                     label: 'Produção Diária (Kg)', 
@@ -157,9 +168,11 @@ const URL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRsMbWT3aqZ8t7j
             },
             options: { 
                 maintainAspectRatio: false,
-                animation: { duration: 500 }, // Adiciona um feedback visual de que atualizou
                 scales: { 
-                    y: { beginAtZero: true } 
+                    y: { 
+                        beginAtZero: true,
+                        ticks: { callback: (value) => value + ' kg' }
+                    } 
                 }
             }
         });
